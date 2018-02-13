@@ -1,57 +1,97 @@
-var crypto = require('crypto')
-var Swarm = require('discovery-swarm')
-var defaults = require('dat-swarm-defaults')
-var getPort = require('get-port')
+const crypto = require('crypto')
+const Swarm = require('discovery-swarm')
+const defaults = require('dat-swarm-defaults')
+const getPort = require('get-port')
 
-// Peer Identity
-var myId = crypto.randomBytes(32)
-console.log('My Identity: ' + myId.toString('hex'))
+// Peer Identity, a random hash for identify your peer
+const myId = crypto.randomBytes(32)
+console.log('Your identity: ' + myId.toString('hex'))
 
-// Default DNS and DHT servers
-var config = defaults({
+/** 
+ * Default DNS and DHT servers
+ * This servers are used for peer discovery and establishing connection
+*/
+const config = defaults({
   id: myId, // peer-id for user
 })
 
-// Used for peer discovery
-var sw = Swarm(config)
+/**
+ * discovery-swarm library establishes a TCP p2p connection and uses
+ * discovery-channel library for peer discovery
+*/
+const sw = Swarm(config)
 
-var peers = {}
+/**
+ * Here we will save our TCP peer connections
+ * using the peer id as key: { peer_id: TCP_Connection }
+*/
+const peers = {}
+// Counter for connections, used for identify connections
+let connSeq = 0
 
 ;(async () => {
 
-  // Random unused port
-  let port = await getPort()
-  console.log('Port: ' + port)
+  // Choose a random unused port for listening TCP peer connections
+  const port = await getPort()
 
   sw.listen(port)
-  // A test channel for connecting to
+  console.log('Listening to port: ' + port)
+
+  /**
+   * The channel we are connecting to.
+   * Peers should search for other peers in this channel
+  */
   sw.join('our-fun-channel')
 
   sw.on('connection', (conn, info) => {
-    let peerId = info.id.toString('hex')
-    // Disallow multiple connecions with same peer
-    if (peers[peerId]) {
-      conn.destroy()
-      return
-    }
-    console.log('Connected to peer: ', peerId)
-    try {
-      conn.setKeepAlive(true, 600)
-    } catch (exception) {
-      console.log('exception', exception)
-    }
+    // Connection id
+    const seq = connSeq
 
-    conn.write('Hello from ' + myId.toString('hex'))
+    const peerId = info.id.toString('hex')
+    console.log(`Connected #${seq} to peer: ${peerId}`)
+
+    // Keep alive TCP connection with peer
+    if (info.initiator) {
+      try {
+        conn.setKeepAlive(true, 600)
+      } catch (exception) {
+        console.log('exception', exception)
+      }
+    }
 
     conn.on('data', data => {
-      console.log('Received Message: ', data.toString())
+      // Here we handle incomming messages
+      console.log('Received Message from peer ', peerId)
+      console.log('Message: ', data.toString())
+      console.log('----')
     })
 
     conn.on('close', () => {
-      delete peers[peerId]
-      console.log('Connection closed')
+      // Here we handle peer disconnection
+      console.log(`Connection ${seq} closed, peer id: ${peerId}`)
+      // If the closing connection is the last connection with the peer, removes the peer
+      if (peers[peerId].seq === seq) {
+        delete peers[peerId]
+      }
     })
 
+    // Save the connection
+    if (!peers[peerId]) {
+      peers[peerId] = {}
+    }
+    peers[peerId].conn = conn
+    peers[peerId].seq = seq
+    connSeq++
+
+    /**
+     * If multiple connetions with same peer save last
+     * normally discovery-swarm closes extra connections
+    */
+    if (peers[peerId]) {
+      return
+    }
+
   })
+
 })()
 
