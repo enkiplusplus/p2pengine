@@ -38,7 +38,6 @@ function log () {
 * Like a chat :)
 */
 const askUser = async () => {
-
   rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
@@ -128,6 +127,7 @@ const sw = Swarm(config)
 
   })
 
+  // Read user message from command line
   askUser()  
 
 })()
