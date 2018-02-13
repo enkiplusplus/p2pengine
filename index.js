@@ -39,7 +39,7 @@ let connSeq = 0
 
   /**
    * The channel we are connecting to.
-   * Peers should search for other peers in this channel
+   * Peers should discover other peers in this channel
   */
   sw.join('our-fun-channel')
 
